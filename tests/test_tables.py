@@ -28,6 +28,15 @@ def test_replace_where_evolves_schema_and_keeps_other_slices(store):
     assert rows == [{"match_id": 1, "v": 9, "new": "n"}, {"match_id": 2, "v": 2, "new": None}]
 
 
+def test_empty_writes_create_and_clear(store):
+    schema = pa.schema([("match_id", pa.int64()), ("v", pa.int64())])
+    store.write("silver", "e", schema.empty_table(), replace_where="match_id IN (1)")
+    assert store.exists("silver", "e") and store.read("silver", "e").num_rows == 0
+    store.write("silver", "e", pa.table({"match_id": [1, 2], "v": [1, 2]}, schema=schema), mode="append")
+    store.write("silver", "e", schema.empty_table(), replace_where="match_id IN (1)")
+    assert store.read("silver", "e").to_pylist() == [{"match_id": 2, "v": 2}]
+
+
 def test_dq_missing_table_fails_unless_optional(store):
     settings = load_settings("local")
     engine = DQEngine(settings, store, "run-1")

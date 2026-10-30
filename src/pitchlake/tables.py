@@ -105,6 +105,8 @@ class TableStore:
     ) -> int:
         """Write an Arrow table. Returns rows written."""
         uri = self.uri(layer, name)
+        if data.num_rows == 0:
+            return self._write_empty(layer, name, data, mode, replace_where, description)
         exists = self.exists(layer, name)
         predicate = replace_where if (replace_where and exists) else None
         if replace_where and not exists:
@@ -130,6 +132,23 @@ class TableStore:
             f" where {predicate[:80]}" if predicate else "",
         )
         return data.num_rows
+
+    def _write_empty(self, layer, name, data, mode, replace_where, description) -> int:
+        """Zero-row writes (e.g. no 360 data in a batch). Older delta-rs refuses an empty write, so
+        create the table from the schema, or apply the delete half of the replace."""
+        dt = self._dt(layer, name)
+        if dt is None:
+            DeltaTable.create(
+                self.uri(layer, name),
+                schema=data.schema,
+                description=description,
+                storage_options=self.platform.storage_options(),
+            )
+        elif replace_where:
+            dt.delete(replace_where)
+        elif mode == "overwrite":
+            dt.delete()
+        return 0
 
     def merge(self, layer: str, name: str, data: pa.Table, keys: Sequence[str]) -> int:
         """Upsert on business keys (small tables only)."""
