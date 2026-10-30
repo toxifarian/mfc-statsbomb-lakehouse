@@ -29,7 +29,7 @@ def test_substitute_spanning_halftime_counts_stoppage_correctly():
 
 
 def test_rebuild_stints_fixes_string_sorted_extra_time_chain():
-    """Real Kyle Walker data, England v Switzerland (Euro 2024 QF): stints chained in string order."""
+    """Real Kyle Walker data, England 2-1 Slovakia aet (Euro 2024 R16): stints chained in string order."""
     scrambled = [
         {
             "position": "Right Back",
@@ -80,7 +80,7 @@ def test_rebuild_stints_fixes_string_sorted_extra_time_chain():
     match_length = sum(e - s for s, e in BOUNDS_ET.values())
     assert naive / 60 > 250  # the bug: ~286 minutes
     assert total == pytest.approx(match_length)  # fixed: exactly the match length
-    assert sum(c for *_, c in rebuilt) == 4
+    assert sum(c for *_, c in rebuilt) == 5  # every stint except the first needed re-chaining
 
 
 def test_player_off_for_treatment_leaves_gap():
@@ -157,3 +157,36 @@ def test_shot_3d_end_location_and_freeze_frame_child_rows():
     rows, freeze, _ = f.flatten_events([shot], 1, 55, 282, "p", None, Counter())
     assert rows[0]["shot_end_z"] == 1.2
     assert len(freeze) == 1 and freeze[0]["shot_event_id"] == "s1"
+
+
+def test_exit_attached_to_wrong_stint_is_honoured():
+    """Real Harry Kane data, same match: subbed off at 105:00 but the exit sits on the first stint."""
+    stints = [
+        {
+            "from": "00:00",
+            "to": "105:00",
+            "from_period": 1,
+            "to_period": 4,
+            "end_reason": "Substitution - Off (Tactical)",
+        },
+        {"from": "65:08", "to": "90:00", "from_period": 2, "to_period": 3, "end_reason": "Tactical Shift"},
+        {"from": "90:00", "to": None, "from_period": 3, "to_period": None, "end_reason": "Final Whistle"},
+    ]
+    total = sum(secs for _, secs, _ in f.rebuild_stints(stints, BOUNDS_ET))
+    first_three_periods = sum(e - s for p, (s, e) in BOUNDS_ET.items() if p < 4)
+    assert total == pytest.approx(first_three_periods)
+
+
+def test_red_card_followed_by_phantom_stint():
+    stints = [
+        {
+            "from": "00:00",
+            "to": "41:07",
+            "from_period": 1,
+            "to_period": 1,
+            "end_reason": "Foul Committed (Red Card)",
+        },
+        {"from": "41:07", "to": None, "from_period": 1, "to_period": None, "end_reason": "Final Whistle"},
+    ]
+    total = sum(secs for _, secs, _ in f.rebuild_stints(stints, BOUNDS_90))
+    assert total == pytest.approx(41 * 60 + 7)

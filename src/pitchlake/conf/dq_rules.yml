@@ -118,17 +118,21 @@ silver:
       FROM latest l JOIN s USING (match_id)
       WHERE l.rn = 1 AND l.record_count <> s.n
 
-  - id: team_minutes_reconcile
+  - id: team_minutes_within_match_length
     type: sql
-    severity: warn
-    description: each side's minutes ~ 11 x match length (catches lineup/clock parsing bugs)
+    severity: error
+    description: a side can never log more than 11 x the match length (catches lineup/clock parsing bugs)
     query: |
-      WITH t AS (
-        SELECT l.match_id, l.team_id, sum(l.minutes_played) mins,
-               max(l.minutes_played) longest
-        FROM silver_lineups l GROUP BY ALL
+      WITH len AS (   -- match length from the events themselves (shoot-out excluded)
+        SELECT match_id, sum(p_len) / 60.0 AS match_mins FROM (
+          SELECT match_id, period, max(timestamp_seconds) AS p_len
+          FROM silver_events WHERE period < 5 GROUP BY ALL) GROUP BY ALL
+      ), t AS (
+        SELECT match_id, team_id, sum(minutes_played) AS team_mins FROM silver_lineups GROUP BY ALL
       )
-      SELECT * FROM t WHERE abs(mins - 11 * longest) > 45   -- red cards allow some slack
+      SELECT t.*, round(11 * len.match_mins, 1) AS max_possible
+      FROM t JOIN len USING (match_id)
+      WHERE t.team_mins > 11 * len.match_mins + 1
 
   - id: matches_have_events
     type: sql
@@ -140,6 +144,7 @@ silver:
       WHERE s.silver_processed_at IS NOT NULL AND e.match_id IS NULL
 
   - id: no_schema_drift
+    optional: true
     type: sql
     severity: warn
     description: no unknown JSON paths seen in this run (they are preserved in extra_json)
@@ -147,14 +152,19 @@ silver:
 
   # ---- integration --------------------------------------------------------
   - id: xref_one_to_one
+    optional: true
     type: sql
     severity: error
-    description: a StatsBomb player maps to at most one id per external system
+    description: links are 1:1 in both directions (else GPS rows would duplicate in gold)
     query: |
-      SELECT sb_player_id, source_system, count(*) c FROM silver_xref_player
+      SELECT 'sb_player' AS side, CAST(sb_player_id AS VARCHAR) AS id, source_system, count(*) c FROM silver_xref_player
+      WHERE status IN ('auto','manual') GROUP BY ALL HAVING count(*) > 1
+      UNION ALL
+      SELECT 'source', source_id, source_system, count(*) FROM silver_xref_player
       WHERE status IN ('auto','manual') GROUP BY ALL HAVING count(*) > 1
 
   - id: xref_review_queue_empty
+    optional: true
     type: sql
     severity: warn
     description: identity links awaiting human review
@@ -215,6 +225,7 @@ gold:
       WHERE t.goals_for <> coalesce(g.shot_goals,0) + coalesce(og.og,0)
 
   - id: physical_rows_linked
+    optional: true
     type: sql
     severity: warn
     description: every Catapult match session found a StatsBomb player-match

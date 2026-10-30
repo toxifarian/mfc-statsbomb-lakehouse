@@ -40,7 +40,7 @@ A Premier League season (380 matches) is therefore ≈ 1.4 M events / ~4 GB raw 
 | 4 | Coordinate arrays vary: `shot.end_location` is 2-D (467) or 3-D (873) | fixed x/y/z columns, z nullable |
 | 5 | 120 × 80 pitch units, origin top-left, **every team attacks left→right** | SQL macros convert to metres-from-centre for tracking/GPS integration |
 | 6 | Event `timestamp` restarts each period; periods 3–4 = extra time, **5 = penalty shoot-out** | shoot-outs excluded from xG/goals/minutes; flagged on shots |
-| 7 | **Lineup stints for extra-time matches are chained in string order of the clock** (`"105:00" < "65:08"`) → naive minutes = 286 for a 133-minute match | stints re-chained by (period, clock); 70 corrections flagged `stint_corrected`; DQ warn; raise with vendor |
+| 7 | **Lineup stints for extra-time matches are chained in string order of the clock** (`"105:00" < "65:08"`) → naive minutes = 286 for a 133-minute match | stints re-chained by (period, clock) and clipped at the real exit (the sub-off / red card is often attached to the wrong stint); 117 corrections flagged `stint_corrected`; DQ warn + an error rule that team minutes ≤ 11 × match length; raise with vendor |
 | 8 | **A coordinate of x = 120.1** exists (a shot on the goal line) | two-tier DQ: impossible values = error, boundary noise = warn |
 | 9 | **Data is revised long after the match**: Euro 2024 files carry `last_updated` from **May 2026** | watermark-based incremental reloads per match; immutable bronze history |
 | 10 | Revisions can *remove or re-index* events | silver replaces a whole match atomically (`replace_where`), never row-merges |

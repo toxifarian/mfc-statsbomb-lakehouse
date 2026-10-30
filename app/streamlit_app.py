@@ -42,7 +42,7 @@ def pipeline() -> Pipeline:
 
 def table(layer: str, name: str, columns: list[str] | None = None) -> pd.DataFrame:
     store = pipeline().store
-    version = store.version(layer, name)
+    version = store.fingerprint(layer, name)
     return _cached_table(layer, name, tuple(columns) if columns else None, version)
 
 
@@ -130,7 +130,10 @@ with tab_overview:
     c[1].metric("Events", f"{pipeline().store.read('gold', 'fact_events', ['event_id']).num_rows:,}")
     c[2].metric("Players", f"{(dim_player.player_key != -1).sum():,}")
     last_dq = dq[dq.run_id == dq.run_id.max()] if not dq.empty else dq
-    c[3].metric("DQ rules passing (last run)", f"{last_dq.passed.mean():.0%}" if not last_dq.empty else "–")
+    c[3].metric(
+        "DQ rules passing (last run)",
+        f"{last_dq.passed.dropna().astype(bool).mean():.0%}" if not last_dq.empty else "–",
+    )
     c[4].metric("Goals / xG", f"{int(fpm.goals.sum())} / {fpm.xg.sum():.1f}")
 
     st.subheader("Recent pipeline steps")
@@ -419,7 +422,12 @@ with tab_quality:
         last = dq[dq.evaluated_at >= dq.evaluated_at.max() - pd.Timedelta(minutes=30)]
         last = last.sort_values("evaluated_at").drop_duplicates("rule_id", keep="last")
         last["status"] = last.apply(
-            lambda r: "✅ pass" if r.passed else ("❌ fail" if r.severity == "error" else "⚠️ warn"), axis=1
+            lambda r: (
+                "⏭ skipped"
+                if pd.isna(r.passed)
+                else ("✅ pass" if r.passed else ("❌ fail" if r.severity == "error" else "⚠️ warn"))
+            ),
+            axis=1,
         )
         st.dataframe(
             last[
@@ -437,7 +445,7 @@ with tab_quality:
             hide_index=True,
             use_container_width=True,
         )
-        failing = last[~last.passed & last.sample_json.notna()]
+        failing = last[(last.passed == False) & last.sample_json.notna()]  # noqa: E712
         if not failing.empty:
             rule = st.selectbox("Inspect failing sample", failing.rule_id)
             st.json(json.loads(failing[failing.rule_id == rule].sample_json.iloc[0]))

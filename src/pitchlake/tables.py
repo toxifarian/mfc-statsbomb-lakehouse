@@ -50,10 +50,12 @@ class TableStore:
         except (TableNotFoundError, FileNotFoundError, OSError):
             return None
         except Exception as exc:  # deltalake raises generic errors for missing tables on some versions
+            # be narrow: treating an auth/network error as "missing" could make a
+            # replace_where write fall back to a full overwrite
             if (
                 "not a Delta table" in str(exc)
                 or "No such file" in str(exc)
-                or "not found" in str(exc).lower()
+                or "no log files" in str(exc).lower()
             ):
                 return None
             raise
@@ -82,6 +84,14 @@ class TableStore:
         dt = self._dt(layer, name)
         return None if dt is None else dt.version()
 
+    def fingerprint(self, layer: str, name: str) -> str | None:
+        """Version + last-commit time: a cache key that also changes if a table is dropped and recreated."""
+        dt = self._dt(layer, name)
+        if dt is None:
+            return None
+        last = dt.history(1)
+        return f"{dt.version()}:{last[0].get('timestamp') if last else ''}"
+
     # ----------------------------------------------------------------- writes
     def write(
         self,
@@ -102,7 +112,10 @@ class TableStore:
         kwargs = _compat_kwargs(
             mode=mode,
             predicate=predicate,
-            schema_mode="merge" if exists else None,
+            # full rebuilds replace the schema (dropped columns disappear); slices/appends evolve it
+            schema_mode=("overwrite" if mode == "overwrite" and not predicate else "merge")
+            if exists
+            else None,
             partition_by=list(partition_by) if partition_by and not exists else None,
             description=description if not exists else None,
             storage_options=self.platform.storage_options(),

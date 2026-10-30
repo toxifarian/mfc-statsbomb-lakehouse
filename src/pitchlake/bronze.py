@@ -46,7 +46,12 @@ def _atomic_write(path, data: bytes) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "wb") as fh:
         fh.write(data)
-    os.replace(tmp, path)
+    try:
+        os.replace(tmp, path)
+    except OSError:  # some FUSE mounts (OneLake /lakehouse/default) don't support rename
+        with open(path, "wb") as fh:
+            fh.write(data)
+        tmp.unlink(missing_ok=True)
 
 
 class BronzeIngestor:
@@ -67,6 +72,31 @@ class BronzeIngestor:
                 self.latest[(row["entity"], row["resource_key"])] = row
 
     # ------------------------------------------------------------------ land
+    def land_safe(self, res: Resource) -> tuple[dict, object | None]:
+        """land() that never raises: any unexpected error becomes a failed manifest row (retried next run)."""
+        try:
+            return self.land(res)
+        except Exception as exc:
+            log.exception("unexpected error landing %s %s", res.entity, res.key)
+            return {
+                "run_id": self.run_id,
+                "source": self.source.name,
+                "entity": res.entity,
+                "resource_key": res.key,
+                "competition_id": res.competition_id,
+                "season_id": res.season_id,
+                "match_id": res.match_id,
+                "path": None,
+                "bytes": None,
+                "sha256": None,
+                "record_count": None,
+                "source_updated_at": res.source_updated_at,
+                "ingested_at": utcnow(),
+                "http_attempts": None,
+                "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+            }, None
+
     def land(self, res: Resource) -> tuple[dict, object | None]:
         """Fetch + land one resource. Returns (manifest_row, parsed_payload)."""
         now = utcnow()
@@ -227,7 +257,7 @@ class BronzeIngestor:
         # 4. fetch in parallel (bounded) – per-resource failure isolation
         results: list[dict] = []
         with ThreadPoolExecutor(max_workers=self.source.max_concurrency) as pool:
-            futures = {pool.submit(self.land, r): r for r in planned}
+            futures = {pool.submit(self.land_safe, r): r for r in planned}
             for fut in as_completed(futures):
                 row, _ = fut.result()
                 results.append(row)

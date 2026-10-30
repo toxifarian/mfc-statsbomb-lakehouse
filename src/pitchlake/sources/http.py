@@ -100,7 +100,7 @@ class HttpClient:
             start = time.monotonic()
             try:
                 resp = self.session.get(url, timeout=self.timeout_s)
-            except (requests.ConnectionError, requests.Timeout) as exc:
+            except requests.RequestException as exc:  # connection, timeout, chunked/decoding errors
                 if attempt > self.max_retries:
                     raise SourceHTTPError(
                         url, None, f"network failure after {attempt} attempts: {exc}"

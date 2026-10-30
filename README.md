@@ -19,7 +19,7 @@ publishes a conformed **star schema** (gold) served through a **Direct Lake** se
 | **Integrate** | conformed dims, player identity xref (Catapult/Transfermarkt) with review queue, metric coordinate conversion |
 | **Serve** | 7 dims + 6 facts, Direct Lake model with DAX measures as code, T-SQL analyst views, Streamlit demo |
 | **Trust** | typed contract + drift detection, 25 DQ rules (error = gate), reconciliation to the scoreline, full run log |
-| **Operate** | Data Pipeline (3 idempotent stages, retries, alerts), CI (lint, 40 tests, live smoke), Terraform, deploy script |
+| **Operate** | Data Pipeline (3 idempotent stages, retries, alerts), CI (lint, 45 tests, live smoke), Terraform, deploy script |
 
 Real findings from the data, caught by the framework: StatsBomb **revises matches years later**
 (Euro 2024 updated in 2026), **extra-time lineups are chained in string order** (naive minutes = 286 for a
@@ -38,7 +38,7 @@ pitchlake run --no-360                 # Euro 2024: bronze → silver → integr
 pitchlake run                          # again: incremental, nothing changed → ~4 s, 2 HTTP calls
 pitchlake status                       # run log, watermarks, landings, DQ, drift
 streamlit run app/streamlit_app.py     # explore the gold layer
-pytest                                 # 40 tests incl. offline end-to-end on real fixture data
+pytest                                 # 45 tests incl. offline end-to-end on real fixture data
 ```
 
 Other scopes: `pitchlake run --scope 43:106` (World Cup 2022), `--scope 37:4 --max-matches 2` (FA WSL 2018/19 —

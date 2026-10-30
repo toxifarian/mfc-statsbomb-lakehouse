@@ -6,7 +6,7 @@ WITH ev AS (
         match_id, player_id, any_value(team_id) AS team_id,
         count(*) FILTER (WHERE type_name IN ('Pass','Carry','Dribble','Shot','Ball Receipt*','Miscontrol','Clearance','Interception','Ball Recovery','Block','Duel')) AS touches,
         count(*) FILTER (WHERE type_name = 'Shot')                                              AS shots,
-        count(*) FILTER (WHERE type_name = 'Shot' AND shot_outcome_name IN ('Goal','Saved','Saved To Post')) AS shots_on_target,
+        count(*) FILTER (WHERE type_name = 'Shot' AND lower(shot_outcome_name) IN ('goal','saved','saved to post')) AS shots_on_target,
         count(*) FILTER (WHERE type_name = 'Shot' AND shot_outcome_name = 'Goal')               AS goals,
         count(*) FILTER (WHERE type_name = 'Shot' AND shot_outcome_name = 'Goal' AND shot_type_name <> 'Penalty') AS non_penalty_goals,
         coalesce(sum(shot_statsbomb_xg), 0)                                                     AS xg,

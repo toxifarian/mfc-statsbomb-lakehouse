@@ -242,12 +242,13 @@ MEASURES = {  # table: [(name, DAX, format, folder)]
     "Shots": [
         ("Shots", "COUNTROWS(FILTER('Shots', NOT 'Shots'[is_penalty_shootout]))", "#,0", "Shooting"),
         ("Shots on Target %", "DIVIDE(CALCULATE([Shots], 'Shots'[is_on_target]), [Shots])", "0.0%", "Shooting"),
-        ("xG per Shot", "DIVIDE(SUM('Shots'[xg]), [Shots])", "0.000", "Shooting"),
+        ("xG per Shot", "DIVIDE(CALCULATE(SUM('Shots'[xg]), NOT 'Shots'[is_penalty_shootout]), [Shots])", "0.000", "Shooting"),
     ],
     "Physical": [
         ("Total Distance (km)", "SUM('Physical'[total_distance_m]) / 1000", "0.0", "Physical"),
         ("HSR per 90 (m)", "DIVIDE(SUM('Physical'[hsr_distance_m]), SUM('Physical'[duration_min])) * 90", "#,0", "Physical"),
-        ("Pressures per 1km HSR", "DIVIDE(SUM('Player Match'[pressures]), SUM('Physical'[hsr_distance_m]) / 1000)", "0.0", "Physical x Technical"),
+        # numerator restricted to players who have GPS data, so both sides cover the same population
+        ("Pressures per 1km HSR", "DIVIDE(CALCULATE(SUM('Player Match'[pressures]), 'Player'[has_gps_data]), SUM('Physical'[hsr_distance_m]) / 1000)", "0.0", "Physical x Technical"),
     ],
 }
 
@@ -257,10 +258,13 @@ with connect_semantic_model(dataset=semantic_model_name, readonly=False) as tom:
         if (ft, fc, tt) not in have:
             tom.add_relationship(from_table=ft, from_column=fc, to_table=tt, to_column=tc,
                                  from_cardinality="Many", to_cardinality="One", is_active=active)
-    have_m = {m.Name for m in tom.all_measures()}
+    have_m = {m.Name: m for m in tom.all_measures()}
     for table, measures in MEASURES.items():
         for name, dax, fmt, folder in measures:
-            if name not in have_m:
+            if name in have_m:   # idempotent: keep definitions in sync with this notebook
+                m = have_m[name]
+                m.Expression, m.FormatString, m.DisplayFolder = dax, fmt, folder
+            else:
                 tom.add_measure(table_name=table, measure_name=name, expression=dax,
                                 format_string=fmt, display_folder=folder)
     tom.mark_as_date_table(table_name="Date", column_name="date")

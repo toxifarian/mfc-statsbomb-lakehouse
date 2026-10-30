@@ -34,7 +34,7 @@ SELECT
     s.shot_statsbomb_xg                              AS xg,
     CASE WHEN s.shot_type_name = 'Penalty' THEN 0 ELSE s.shot_statsbomb_xg END AS npxg,
     s.shot_outcome_name = 'Goal'                     AS is_goal,
-    s.shot_outcome_name IN ('Goal', 'Saved', 'Saved To Post') AS is_on_target,
+    lower(s.shot_outcome_name) IN ('goal', 'saved', 'saved to post') AS is_on_target,
     s.shot_type_name = 'Penalty'                     AS is_penalty,
     s.period = 5                                     AS is_penalty_shootout,
     s.shot_first_time                                AS is_first_time,

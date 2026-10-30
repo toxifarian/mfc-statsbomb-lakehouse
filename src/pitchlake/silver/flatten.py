@@ -221,6 +221,15 @@ def rebuild_stints(
         return (tp, clock_to_seconds(s["to"]))
 
     ordered = sorted(stints, key=start_of)
+    match_end = (last, bounds[last][1])
+
+    # The player's real exit (substitution off / dismissal) is reliable even when the chain
+    # is scrambled: the source attaches it to *some* stint, often not the last one. Every
+    # stint is clipped at that point (fixes e.g. subs at 105:00 and sending-offs followed by
+    # a phantom "Tactical Shift -> Final Whistle" stint).
+    exits = [own_end(s) for s in ordered if _is_exit(s.get("end_reason")) and own_end(s) is not None]
+    exit_point = min(exits) if exits else match_end
+
     out = []
     for i, s in enumerate(ordered):
         st = start_of(s)
@@ -233,10 +242,16 @@ def rebuild_stints(
         if nxt is not None:
             end = oe if valid_own and oe <= nxt else nxt
         else:
-            end = oe if valid_own else (last, None)
-        corrected = oe is not None and end != oe
-        out.append((s, span_seconds(st, end, bounds), corrected))
+            end = oe if valid_own else match_end
+        end = min(end, exit_point)
+        corrected = (oe is not None and end != oe) or (oe is None and end != match_end)
+        out.append((s, span_seconds(st, end, bounds) if end > st else 0.0, corrected))
     return out
+
+
+def _is_exit(reason: str | None) -> bool:
+    r = (reason or "").lower()
+    return r.startswith("substitution - off") or "red card" in r or "second yellow" in r
 
 
 # ============================================================== lineups

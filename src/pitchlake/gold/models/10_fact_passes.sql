@@ -21,7 +21,8 @@ SELECT
     p.location_x, p.location_y, p.pass_end_x AS end_x, p.pass_end_y AS end_y,
     p.under_pressure,
     -- progressive: completed open-play pass that moves the ball >= 25% closer to goal centre
-    (p.pass_outcome_name IS NULL AND p.pass_type_name IS NULL AND p.location_x >= 40
+    (p.pass_outcome_name IS NULL AND coalesce(p.pass_type_name, 'Open Play') IN ('Open Play', 'Recovery', 'Interception')
+        AND p.location_x >= 40
         AND dist_to_goal(p.pass_end_x, p.pass_end_y) <= 0.75 * dist_to_goal(p.location_x, p.location_y)) AS is_progressive,
     (p.pass_outcome_name IS NULL AND p.location_x < 80 AND p.pass_end_x >= 80)                         AS is_into_final_third,
     (p.pass_outcome_name IS NULL AND p.pass_end_x >= 102 AND p.pass_end_y BETWEEN 18 AND 62

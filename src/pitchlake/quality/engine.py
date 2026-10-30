@@ -108,14 +108,17 @@ class DQEngine:
         for rule in rules:
             failing_sql, total_sql = compile_rule(rule)
             failing_sql = failing_sql.replace("{run_id}", self.run_id)
+            skipped = None
             try:
                 failed = scalar(con, f"SELECT count(*) FROM ({failing_sql}) q")
                 sample = records(con, f"SELECT * FROM ({failing_sql}) q LIMIT 5") if failed else []
                 total = scalar(con, total_sql) if total_sql else None
-                err = None
             except duckdb.CatalogException as exc:
-                # referenced table absent (e.g. optional source not loaded) -> skip, don't fail
-                failed, sample, total, err = 0, [], None, f"skipped: {str(exc).splitlines()[0]}"
+                # a referenced table doesn't exist. Rules marked `optional` (e.g. sources that may not be
+                # loaded) are skipped and recorded as such; anything else fails – a missing table is a defect.
+                reason = str(exc).splitlines()[0]
+                failed, sample, total = (0 if rule.get("optional") else 1), [], None
+                skipped = f"skipped – {reason}" if rule.get("optional") else f"table missing – {reason}"
             results.append(
                 {
                     "run_id": self.run_id,
@@ -123,8 +126,10 @@ class DQEngine:
                     "table_name": rule.get("table", "(sql)"),
                     "rule_type": rule["type"],
                     "severity": rule.get("severity", "error"),
-                    "description": rule.get("description") or err,
-                    "passed": failed == 0,
+                    "description": f"{skipped} | {rule.get('description') or ''}"
+                    if skipped
+                    else rule.get("description"),
+                    "passed": None if (skipped and rule.get("optional")) else failed == 0,
                     "failed_count": failed,
                     "total_count": total,
                     "sample_json": json.dumps(sample, default=str) if sample else None,
@@ -140,18 +145,19 @@ class DQEngine:
                 level,
                 "DQ %-40s %s (%s failing%s)",
                 rule["id"],
-                "PASS" if failed == 0 else "FAIL",
+                "SKIP" if (skipped and rule.get("optional")) else ("PASS" if failed == 0 else "FAIL"),
                 failed,
                 f" of {total}" if total is not None else "",
             )
 
         self.store.write("meta", "dq_results", meta.rows_to_table(results, meta.DQ_RESULTS), mode="append")
-        errors = [r for r in results if not r["passed"] and r["severity"] == "error"]
-        warns = [r for r in results if not r["passed"] and r["severity"] == "warn"]
+        errors = [r for r in results if r["passed"] is False and r["severity"] == "error"]
+        warns = [r for r in results if r["passed"] is False and r["severity"] == "warn"]
         metrics.update(
             rows_in=len(rules),
             rows_out=len(results),
-            passed=sum(r["passed"] for r in results),
+            passed=sum(r["passed"] is True for r in results),
+            skipped=[r["rule_id"] for r in results if r["passed"] is None],
             errors=[r["rule_id"] for r in errors],
             warnings=[r["rule_id"] for r in warns],
         )

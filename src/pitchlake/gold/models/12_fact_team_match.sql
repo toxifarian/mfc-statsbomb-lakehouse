@@ -10,13 +10,13 @@ teams AS (
 ), shots AS (
     SELECT match_id, team_id, count(*) AS shots, sum(shot_statsbomb_xg) AS xg,
            sum(shot_statsbomb_xg) FILTER (WHERE shot_type_name <> 'Penalty') AS npxg,
-           count(*) FILTER (WHERE shot_outcome_name IN ('Goal','Saved','Saved To Post')) AS shots_on_target
+           count(*) FILTER (WHERE lower(shot_outcome_name) IN ('goal','saved','saved to post')) AS shots_on_target
     FROM ev WHERE type_name = 'Shot' GROUP BY ALL
 ), passes AS (
     SELECT match_id, team_id, count(*) AS passes, count(*) FILTER (WHERE pass_outcome_name IS NULL) AS passes_completed,
            -- passes in own defensive 60% (StatsBomb normalises every team to attack left->right)
            count(*) FILTER (WHERE location_x <= 72) AS passes_own_60pct
-    FROM ev WHERE type_name = 'Pass' AND pass_type_name IS NULL GROUP BY ALL
+    FROM ev WHERE type_name = 'Pass' AND coalesce(pass_type_name, 'Open Play') IN ('Open Play', 'Recovery', 'Interception') GROUP BY ALL
 ), def_actions AS (
     -- defensive actions in the opponent's 60% of the pitch (x >= 48 from the defending team's view)
     SELECT match_id, team_id, count(*) AS def_actions_high
@@ -49,3 +49,4 @@ LEFT JOIN def_actions d ON d.match_id = t.match_id AND d.team_id = t.team_id
 LEFT JOIN poss po ON po.match_id = t.match_id AND po.team_id = t.team_id
 LEFT JOIN poss pp ON pp.match_id = t.match_id AND pp.team_id = t.opp_id
 WHERE m.match_status = 'available'
+  AND t.match_id IN (SELECT DISTINCT match_id FROM silver_events)   -- only matches whose events are loaded
