@@ -1,0 +1,224 @@
+# -----------------------------------------------------------------------------
+# Data quality rules (declarative). Evaluated by pitchlake.quality.engine.
+#
+#   severity: error -> blocks promotion to gold when quality.mode = enforce
+#   severity: warn  -> recorded in meta.dq_results, surfaced in monitoring
+#
+# Rule types: not_null | unique | accepted_values | range | relationship |
+#             expression | row_count_min | sql (query returns failing rows)
+# -----------------------------------------------------------------------------
+silver:
+  # ---- completeness & keys -------------------------------------------------
+  - id: events_pk_unique
+    type: unique
+    table: silver.events
+    columns: [event_id]
+    severity: error
+    description: StatsBomb event UUIDs are unique
+
+  - id: events_keys_not_null
+    type: not_null
+    table: silver.events
+    columns: [event_id, match_id, type_id, period, team_id]
+    severity: error
+
+  - id: events_match_exists
+    type: relationship
+    table: silver.events
+    column: match_id
+    ref_table: silver.matches
+    ref_column: match_id
+    severity: error
+    description: every event belongs to a known match
+
+  - id: lineups_player_match_unique
+    type: unique
+    table: silver.lineups
+    columns: [match_id, player_id]
+    severity: error
+
+  # ---- validity -----------------------------------------------------------
+  # Two-tier thresholds: physically impossible -> error; boundary noise -> warn.
+  # (Profiling found a real Euro 2024 shot at x = 120.1 – on the goal line.)
+  - id: events_location_x_plausible
+    type: range
+    table: silver.events
+    column: location_x
+    min: -1
+    max: 121
+    severity: error
+    description: x coordinate within 1 unit of the 120-unit StatsBomb pitch
+
+  - id: events_location_y_plausible
+    type: range
+    table: silver.events
+    column: location_y
+    min: -1
+    max: 81
+    severity: error
+
+  - id: events_location_on_pitch
+    type: expression
+    table: silver.events
+    expression: "location_x IS NULL OR (location_x BETWEEN 0 AND 120 AND location_y BETWEEN 0 AND 80)"
+    severity: warn
+    description: boundary noise outside the nominal 120 x 80 pitch
+
+  - id: shot_xg_is_probability
+    type: range
+    table: silver.events
+    column: shot_statsbomb_xg
+    min: 0
+    max: 1
+    severity: error
+
+  - id: events_period_valid
+    type: accepted_values
+    table: silver.events
+    column: period
+    values: [1, 2, 3, 4, 5]
+    severity: error
+
+  - id: shots_have_xg
+    type: expression
+    table: silver.events
+    where: "type_name = 'Shot'"
+    expression: "shot_statsbomb_xg IS NOT NULL"
+    severity: error
+
+  - id: lineup_stints_corrected
+    type: expression
+    table: silver.lineup_positions
+    expression: "NOT stint_corrected"
+    severity: warn
+    description: source position stints were out of order and re-chained (vendor issue to raise)
+
+  - id: minutes_played_plausible
+    type: range
+    table: silver.lineups
+    column: minutes_played
+    min: 0
+    max: 135
+    severity: warn
+    description: nobody plays more than 120 mins + stoppage
+
+  # ---- reconciliation (bronze -> silver) -----------------------------------
+  - id: bronze_silver_event_reconciliation
+    type: sql
+    severity: error
+    description: silver holds exactly the events landed in the latest bronze file per match
+    query: |
+      WITH latest AS (
+        SELECT match_id, record_count,
+               row_number() OVER (PARTITION BY match_id ORDER BY ingested_at DESC) rn
+        FROM meta_bronze_manifest
+        WHERE entity = 'events' AND status IN ('landed', 'unchanged')
+      ), s AS (SELECT match_id, count(*) n FROM silver_events GROUP BY match_id)
+      SELECT l.match_id, l.record_count AS bronze_rows, s.n AS silver_rows
+      FROM latest l JOIN s USING (match_id)
+      WHERE l.rn = 1 AND l.record_count <> s.n
+
+  - id: team_minutes_reconcile
+    type: sql
+    severity: warn
+    description: each side's minutes ~ 11 x match length (catches lineup/clock parsing bugs)
+    query: |
+      WITH t AS (
+        SELECT l.match_id, l.team_id, sum(l.minutes_played) mins,
+               max(l.minutes_played) longest
+        FROM silver_lineups l GROUP BY ALL
+      )
+      SELECT * FROM t WHERE abs(mins - 11 * longest) > 45   -- red cards allow some slack
+
+  - id: matches_have_events
+    type: sql
+    severity: warn
+    description: every processed match produced events
+    query: |
+      SELECT s.match_id FROM meta_ingestion_state s
+      LEFT JOIN (SELECT DISTINCT match_id FROM silver_events) e USING (match_id)
+      WHERE s.silver_processed_at IS NOT NULL AND e.match_id IS NULL
+
+  - id: no_schema_drift
+    type: sql
+    severity: warn
+    description: no unknown JSON paths seen in this run (they are preserved in extra_json)
+    query: "SELECT * FROM meta_schema_drift WHERE run_id = '{run_id}'"
+
+  # ---- integration --------------------------------------------------------
+  - id: xref_one_to_one
+    type: sql
+    severity: error
+    description: a StatsBomb player maps to at most one id per external system
+    query: |
+      SELECT sb_player_id, source_system, count(*) c FROM silver_xref_player
+      WHERE status IN ('auto','manual') GROUP BY ALL HAVING count(*) > 1
+
+  - id: xref_review_queue_empty
+    type: sql
+    severity: warn
+    description: identity links awaiting human review
+    query: "SELECT * FROM silver_xref_player WHERE status IN ('review','unmatched')"
+
+gold:
+  - id: dim_player_key_unique
+    type: unique
+    table: gold.dim_player
+    columns: [player_key]
+    severity: error
+
+  - id: dim_match_key_unique
+    type: unique
+    table: gold.dim_match
+    columns: [match_key]
+    severity: error
+
+  - id: fact_events_player_fk
+    type: relationship
+    table: gold.fact_events
+    column: player_key
+    ref_table: gold.dim_player
+    ref_column: player_key
+    severity: error
+
+  - id: fact_player_match_fk_match
+    type: relationship
+    table: gold.fact_player_match
+    column: match_key
+    ref_table: gold.dim_match
+    ref_column: match_key
+    severity: error
+
+  - id: fact_player_match_grain
+    type: unique
+    table: gold.fact_player_match
+    columns: [match_key, player_key]
+    severity: error
+
+  - id: goals_reconcile_to_scoreline
+    type: sql
+    severity: error
+    description: goals in fact_team_match equal shots scored + own goals (proves event data is complete)
+    query: |
+      WITH g AS (
+        SELECT match_id, team_id, count(*) FILTER (WHERE type_name='Shot' AND shot_outcome_name='Goal' AND period < 5) shot_goals
+        FROM silver_events GROUP BY ALL
+      ), og AS (
+        SELECT match_id, team_id, count(*) og FROM silver_events WHERE type_name = 'Own Goal For' GROUP BY ALL
+      )
+      SELECT t.match_key, t.team_key, t.goals_for, coalesce(g.shot_goals,0) + coalesce(og.og,0) AS event_goals
+      FROM gold_fact_team_match t
+      JOIN gold_dim_match m USING (match_key)
+      JOIN gold_dim_team dt ON dt.team_key = t.team_key
+      LEFT JOIN g ON g.match_id = m.sb_match_id AND g.team_id = dt.sb_team_id
+      LEFT JOIN og ON og.match_id = m.sb_match_id AND og.team_id = dt.sb_team_id
+      WHERE t.goals_for <> coalesce(g.shot_goals,0) + coalesce(og.og,0)
+
+  - id: physical_rows_linked
+    type: sql
+    severity: warn
+    description: every Catapult match session found a StatsBomb player-match
+    query: |
+      SELECT s.session_id FROM silver_catapult_match_sessions s
+      LEFT JOIN gold_fact_player_match_physical p USING (session_id)
+      WHERE p.session_id IS NULL
