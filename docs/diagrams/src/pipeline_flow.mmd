@@ -1,0 +1,15 @@
+flowchart LR
+    A[competitions.json] -->|validate scope| B[matches per comp-season]
+    B -->|compare last_updated / last_updated_360<br/>with meta.ingestion_state| C{changed?}
+    C -- no --> Z[skip – zero API calls]
+    C -- yes --> D[fetch events · lineups · 360<br/>parallel, rate-limited, retried]
+    D -->|sha256 unchanged| U[record 'unchanged']
+    D --> E[Bronze: immutable JSON + manifest]
+    E --> F[Silver: flatten to contract<br/>replace_where match_id]
+    F --> G[drift → meta.schema_drift<br/>unknown keys kept in extra_json]
+    F --> H[Integrate: player xref<br/>Catapult · Transfermarkt]
+    H --> I{DQ gate<br/>error rules}
+    I -- fail --> X[stop · alert · gold untouched]
+    I -- pass --> J[Gold: SQL models → star schema]
+    J --> K{DQ gold}
+    K --> L[Direct Lake model refresh]

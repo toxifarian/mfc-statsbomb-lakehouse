@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{--red:#d7192d;--navy:#1d2a44;--gold:#c9a227;--ink:#1f2933;--mut:#5f6b7a;--line:#cfd6de}
+body{margin:0;font-family:"Segoe UI",Inter,Arial,sans-serif;color:var(--ink);background:#fff}
+.wrap{width:1600px;height:760px;padding:26px 32px;box-sizing:border-box}
+h1{margin:0 0 4px;font-size:26px;color:var(--navy)}.sub{color:var(--mut);font-size:14px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:760px 1fr;gap:34px}
+svg text{font-family:inherit}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid #e5e9ee;padding:8px 6px;text-align:center}
+th{font-size:12px;color:var(--mut);font-weight:600;writing-mode:vertical-rl;transform:rotate(180deg);height:120px;vertical-align:bottom}
+td:first-child{text-align:left;font-weight:600;color:var(--navy);white-space:nowrap}
+td small{display:block;font-weight:400;color:var(--mut);font-size:11.5px}
+.y{color:var(--red);font-size:18px}.n{color:#d5dbe1}
+.note{margin-top:14px;font-size:13px;color:var(--mut);line-height:1.5}
+.note b{color:var(--ink)}
+</style></head><body><div class="wrap">
+<h1>Gold layer: conformed star schema (Kimball bus)</h1>
+<div class="sub">Grain-first facts · conformed dimensions shared by every source · deterministic 60-bit surrogate keys (md5 of source + natural key) · unknown member = -1</div>
+<div class="grid">
+<svg width="760" height="620" viewBox="0 0 760 620">
+ <defs><style>.d rect{fill:#fff;stroke:#1d2a44;stroke-width:1.6}.d text{font-size:14px;fill:#1d2a44;font-weight:600}.d .s{font-size:11.5px;fill:#5f6b7a;font-weight:400}
+ .f rect{fill:#d7192d}.f text{fill:#fff;font-size:15px;font-weight:700}.f .s{fill:#ffe5e8;font-size:11.5px;font-weight:400}
+ .p rect{fill:#c9a227}.p text{fill:#2b2200;font-size:14px;font-weight:700}.p .s{fill:#3b3000;font-size:11.5px;font-weight:400}
+ line{stroke:#9aa6b2;stroke-width:1.5}</style></defs>
+ <line x1="380" y1="300" x2="120" y2="100"/><line x1="380" y1="300" x2="380" y2="60"/><line x1="480" y1="60" x2="640" y2="70"/>
+ <line x1="380" y1="300" x2="95" y2="300"/><line x1="380" y1="300" x2="560" y2="300"/>
+ <line x1="380" y1="300" x2="380" y2="520"/><line x1="120" y1="70" x2="380" y2="60"/>
+ <line x1="665" y1="300" x2="610" y2="520"/><line x1="380" y1="60" x2="610" y2="520" style="stroke-dasharray:4 4"/>
+ <g class="d"><rect x="20" y="40" width="200" height="62" rx="9"/><text x="34" y="66">dim_date</text><text class="s" x="34" y="86">calendar · football season</text></g>
+ <g class="d"><rect x="280" y="28" width="200" height="62" rx="9"/><text x="294" y="54">dim_match</text><text class="s" x="294" y="74">stage · venue · ref · data version</text></g>
+ <g class="d"><rect x="540" y="40" width="200" height="62" rx="9"/><text x="554" y="66">dim_competition_season</text><text class="s" x="554" y="86">competition · season · 360?</text></g>
+ <g class="d"><rect x="5" y="262" width="180" height="76" rx="9"/><text x="19" y="288">dim_team</text><text class="s" x="19" y="308">team (and opponent role)</text><text class="s" x="19" y="324">gender · country</text></g>
+ <g class="d"><rect x="548" y="250" width="207" height="100" rx="9"/><text x="562" y="276">dim_player</text><text class="s" x="562" y="296">display name · nationality</text><text class="s" x="562" y="312">primary position group</text><text class="s" x="562" y="328">catapult_athlete_id ⟵ xref</text><text class="s" x="562" y="344">transfermarkt_player_id ⟵ xref</text></g>
+ <g class="d"><rect x="290" y="490" width="180" height="62" rx="9"/><text x="304" y="516">dim_position</text><text class="s" x="304" y="536">GK / DEF / MID / FWD</text></g>
+ <g class="f"><rect x="255" y="250" width="250" height="100" rx="12"/><text x="271" y="278">fact_player_match</text><text class="s" x="271" y="300">grain: 1 player × 1 match</text><text class="s" x="271" y="318">minutes · xG · npxG · xA · prog passes</text><text class="s" x="271" y="336">pressures · tackles · touches · cards</text></g>
+ <g class="p"><rect x="520" y="490" width="230" height="86" rx="12"/><text x="534" y="516">fact_player_match_physical</text><text class="s" x="534" y="536">Catapult: distance · HSR · sprints</text><text class="s" x="534" y="552">same grain + keys → joins to events</text><text class="s" x="534" y="568">(other source, conformed dims)</text></g>
+ <text x="22" y="600" font-size="12.5" fill="#5f6b7a">Plus fact_events · fact_shots · fact_passes · fact_team_match on the same dimensions (matrix →)</text>
+</svg>
+<div>
+<table>
+<tr><td></td><th>dim_date</th><th>dim_match</th><th>competition (via match)</th><th>dim_team</th><th>opponent (dim_team)</th><th>dim_player</th><th>dim_position</th><th>dim_event_type</th></tr>
+<tr><td>fact_events<small>1 row / event · 188k (Euro 24)</small></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">·</td><td class="y">●</td><td class="y">●</td><td class="y">●</td></tr>
+<tr><td>fact_shots<small>1 / shot · xG, angle, defenders in cone</small></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">·</td><td class="n">·</td></tr>
+<tr><td>fact_passes<small>1 / pass · progressive, into box, xA</small></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">·</td><td class="y">●</td><td class="n">·</td><td class="n">·</td></tr>
+<tr><td>fact_player_match<small>1 / player × match</small></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">·</td><td class="n">·</td></tr>
+<tr><td>fact_team_match<small>1 / team × match · PPDA, possession</small></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">·</td><td class="n">·</td><td class="n">·</td></tr>
+<tr><td>fact_player_match_physical<small>Catapult · 1 / player × match</small></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">·</td><td class="n">·</td><td class="y">●</td><td class="n">·</td><td class="n">·</td></tr>
+<tr><td style="color:#5f6b7a">future: fact_tracking_frame<small>Second Spectrum</small></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">·</td><td class="y">●</td><td class="n">·</td><td class="n">·</td></tr>
+<tr><td style="color:#5f6b7a">future: fact_physical_test<small>VALD (dated, not match)</small></td><td class="y">●</td><td class="n">·</td><td class="n">·</td><td class="n">·</td><td class="n">·</td><td class="y">●</td><td class="n">·</td><td class="n">·</td></tr>
+</table>
+<div class="note"><b>Why a star, not one wide table?</b> Coaches, analysts and data scientists ask questions at different grains. Facts at their natural grain + shared dimensions let Power BI (Direct Lake) slice any fact by the same player / match / date — and adding a source means adding a fact, not reworking the model.</div>
+</div></div></div></body></html>

@@ -1,0 +1,68 @@
+erDiagram
+    dim_date ||--o{ dim_match : "date_key"
+    dim_competition_season ||--o{ dim_match : "competition_season_key"
+    dim_match ||--o{ fact_player_match : match_key
+    dim_player ||--o{ fact_player_match : player_key
+    dim_team ||--o{ fact_player_match : team_key
+    dim_match ||--o{ fact_player_match_physical : match_key
+    dim_player ||--o{ fact_player_match_physical : player_key
+    dim_match ||--o{ fact_team_match : match_key
+    dim_team ||--o{ fact_team_match : team_key
+    dim_match ||--o{ fact_shots : match_key
+    dim_player ||--o{ fact_shots : player_key
+    dim_match ||--o{ fact_passes : match_key
+    dim_player ||--o{ fact_passes : player_key
+    dim_match ||--o{ fact_events : match_key
+    dim_player ||--o{ fact_events : player_key
+    dim_event_type ||--o{ fact_events : event_type_key
+    dim_position ||--o{ fact_events : position_key
+
+    dim_player {
+        bigint player_key PK
+        int sb_player_id
+        string display_name
+        string nationality
+        string primary_position_group
+        string catapult_athlete_id "via xref"
+        bigint transfermarkt_player_id "via xref"
+    }
+    dim_match {
+        bigint match_key PK
+        int date_key FK
+        bigint home_team_key FK
+        bigint away_team_key FK
+        string stage
+        string fixture_result
+        bool has_360_data
+    }
+    fact_player_match {
+        bigint match_key FK
+        bigint player_key FK
+        double minutes_played
+        double xg
+        double xa
+        int progressive_passes
+        int pressures
+    }
+    fact_player_match_physical {
+        bigint match_key FK
+        bigint player_key FK
+        double total_distance_m
+        double hsr_distance_m
+        int sprint_efforts
+        bool is_synthetic
+    }
+    fact_shots {
+        string shot_id PK
+        double xg
+        bool is_goal
+        double distance_to_goal
+        int defenders_in_shot_cone
+    }
+    fact_team_match {
+        bigint match_key FK
+        bigint team_key FK
+        double xg
+        double possession_pct
+        double ppda
+    }
