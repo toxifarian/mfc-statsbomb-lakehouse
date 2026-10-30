@@ -1,0 +1,5 @@
+environment             = "dev"
+capacity_name           = "Trial-20261029"
+subscription_id         = "00000000-0000-0000-0000-000000000000"
+data_engineers_group_id = "00000000-0000-0000-0000-000000000000"
+analysts_group_id       = "00000000-0000-0000-0000-000000000000"
