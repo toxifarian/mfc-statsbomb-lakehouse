@@ -8,7 +8,7 @@ This gets the platform running in a Fabric workspace (≈ 30–40 minutes the fi
 
 ## 0 · Prerequisites
 * GitHub repo pushed (public, so Fabric can `pip install` the tagged release) and tagged: `git tag v1.0.0 && git push --tags`.
-* In `scripts/build_notebooks.py` replace `<GITHUB_USER>` with your GitHub username, then
+* In `scripts/build_notebooks.py` replace `toxifarian` with your GitHub username, then
   `python scripts/build_notebooks.py` and commit (CI does this automatically on tag via `deploy-fabric.yml`).
 
 ## 1 · Workspace & lakehouse (5 min)

@@ -3,7 +3,7 @@
 **Integrating StatsBomb event data into a cloud sports-data platform — from API to Power BI.**
 Built for the Middlesbrough FC *Data Engineer* interview task ("Integrating a New Data Source").
 
-[![ci](https://github.com/<GITHUB_USER>/mfc-statsbomb-lakehouse/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![ci](https://github.com/toxifarian/mfc-statsbomb-lakehouse/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
 ![architecture](docs/diagrams/architecture.png)
 
@@ -30,7 +30,7 @@ Real findings from the data, caught by the framework: StatsBomb **revises matche
 ## Quick start (local, ~2 minutes)
 
 ```bash
-git clone https://github.com/<GITHUB_USER>/mfc-statsbomb-lakehouse.git && cd mfc-statsbomb-lakehouse
+git clone https://github.com/toxifarian/mfc-statsbomb-lakehouse.git && cd mfc-statsbomb-lakehouse
 python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e ".[dev,app]"
 

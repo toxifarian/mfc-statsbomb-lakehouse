@@ -59,7 +59,7 @@ dq_mode = "enforce"              # enforce | warn
 environment = "fabric"           # fabric | fabric-prod
 # Pinned release of the framework. A GitHub tag archive needs no git client in the runtime.
 # Alternative: upload the wheel from CI to Files/libs and use "/lakehouse/default/Files/libs/pitchlake-1.0.0-py3-none-any.whl"
-package_source = "https://github.com/<GITHUB_USER>/mfc-statsbomb-lakehouse/archive/refs/tags/v1.0.0.zip"
+package_source = "https://github.com/toxifarian/mfc-statsbomb-lakehouse/archive/refs/tags/v1.0.0.zip"
 """,
     parameters=True,
 )
