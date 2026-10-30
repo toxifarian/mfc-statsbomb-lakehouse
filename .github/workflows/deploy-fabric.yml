@@ -1,0 +1,32 @@
+name: deploy-fabric
+
+# Tag a release (v1.2.3) -> notebooks (pinned to that tag) are deployed to the DEV workspace.
+# Promotion DEV -> TEST -> PROD is a Fabric deployment pipeline with an approval gate.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC federated credential – no long-lived secrets in GitHub
+  contents: read
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Pin notebooks to this release
+        run: |
+          sed -i "s#/tags/v[0-9.]*\.zip#/tags/${GITHUB_REF_NAME}.zip#; s#<GITHUB_USER>#${GITHUB_REPOSITORY_OWNER}#" scripts/build_notebooks.py
+          python scripts/build_notebooks.py
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+      - run: pip install requests && python scripts/deploy_fabric.py --workspace-id "${{ vars.FABRIC_WORKSPACE_ID_DEV }}"

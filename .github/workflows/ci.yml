@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * *"   # nightly: catch upstream (StatsBomb) changes early
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]   # 3.11 = Fabric Python runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests app scripts && ruff format --check src tests app scripts
+      - name: Notebooks are generated from source (no drift)
+        run: python scripts/build_notebooks.py && git diff --exit-code fabric/notebooks
+      - name: Unit + offline end-to-end tests
+        run: pytest --cov=pitchlake --cov-report=term-missing
+
+  live-smoke:
+    # proves the real endpoint + contract still hold; runs nightly and on main
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest -m live
+      - name: Two-match end-to-end against live open data
+        run: |
+          pitchlake run --scope 55:282 --max-matches 2 --no-360
+          pitchlake status
+      - name: Fail on new schema drift
+        run: |
+          python - <<'PY'
+          from pitchlake.pipeline import Pipeline
+          s = Pipeline.from_env("local").store
+          if s.exists("meta", "schema_drift") and s.read("meta", "schema_drift").num_rows:
+              raise SystemExit("StatsBomb payload contains fields not in the silver contract – review before prod")
+          PY
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build && python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pitchlake-wheel
+          path: dist/*.whl
