@@ -1,0 +1,21 @@
+# Production overlay: licensed API, full 360, strict DQ. Promoted through
+# Fabric deployment pipelines (Dev -> Test -> Prod) — only this file differs.
+platform:
+  kind: fabric
+  mount_root: /lakehouse/default
+  abfss_root: null
+  key_vault_url: https://kv-mfc-data-prod.vault.azure.net/
+
+sources:
+  statsbomb:
+    mode: api
+    scope:
+      - competition_id: 10      # illustrative: EFL Championship
+        season_id: 317          # illustrative season id
+        label: EFL Championship (licensed)
+
+synthetic_sources:
+  enabled: false
+
+quality:
+  mode: enforce

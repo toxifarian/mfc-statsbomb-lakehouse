@@ -1,0 +1,71 @@
+# -----------------------------------------------------------------------------
+# pitchlake — base configuration (shared by every environment)
+#
+# The framework is metadata-driven: adding a competition, switching from open
+# data to the licensed API, or turning on 360 data is a config change, not a
+# code change. Environment files in ./environments overlay this file.
+# -----------------------------------------------------------------------------
+project: mfc-statsbomb
+
+sources:
+  statsbomb:
+    # open -> public StatsBomb open-data repo (no auth, used for this PoC)
+    # api  -> licensed Hudl StatsBomb API (basic auth; creds from Key Vault)
+    mode: open
+    open_base_url: https://raw.githubusercontent.com/statsbomb/open-data/master/data
+    api_base_url: https://data.statsbombservices.com/api
+    # Endpoint versions are pinned deliberately. The API exposes
+    # /api/endpoint-versions; `pitchlake check-api` compares live vs pinned so a
+    # new version is a reviewed change, never a silent one.
+    api_versions:
+      competitions: v4
+      matches: v6
+      lineups: v5
+      events: v11
+      frames_360: v2
+    credentials:
+      username_secret: statsbomb-api-username
+      password_secret: statsbomb-api-password
+    http:
+      timeout_s: 60
+      max_retries: 5
+      backoff_base_s: 1.0
+      max_concurrency: 8
+      requests_per_second: 8
+    entities:
+      lineups: true
+      events: true
+      frames_360: true
+    # What to ingest. Each entry is one competition-season.
+    scope:
+      - competition_id: 55
+        season_id: 282
+        label: UEFA Euro 2024
+    # Safety valve for demos / backfills (null = no limit)
+    max_matches_per_run: null
+
+# Synthetic stand-ins for the club's other systems, so cross-source integration
+# can be demonstrated end-to-end without real (and personal) club data.
+synthetic_sources:
+  enabled: true
+  seed: 1876
+  # The team whose players get Catapult GPS + Transfermarkt profiles
+  focus_team: England
+
+integration:
+  identity:
+    auto_match_threshold: 90
+    review_threshold: 75
+    overrides_file: reference/xref_player_overrides.csv
+
+quality:
+  rules_file: dq_rules.yml
+  # enforce -> any failed `error` rule stops promotion to gold
+  # warn    -> log and continue (useful for backfills)
+  mode: enforce
+
+lakehouse:
+  # schema -> Tables/<layer>/<table>   (Fabric lakehouse with schemas enabled)
+  # prefix -> Tables/<layer>_<table>   (classic lakehouse, no schemas)
+  table_layout: schema
+  bronze_folder: bronze/statsbomb

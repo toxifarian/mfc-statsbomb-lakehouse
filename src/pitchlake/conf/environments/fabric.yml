@@ -1,0 +1,11 @@
+# Microsoft Fabric environment (Python or Spark notebook, default lakehouse attached)
+platform:
+  kind: fabric
+  # Files are written through the default-lakehouse mount.
+  mount_root: /lakehouse/default
+  # Delta tables are written over OneLake (abfss) with a Fabric bearer token.
+  # Leave null to auto-detect from the attached default lakehouse; or paste the
+  # lakehouse "ABFS path" from Lakehouse > Properties.
+  abfss_root: null
+  # Key Vault holding StatsBomb API credentials (only needed when mode: api)
+  key_vault_url: null

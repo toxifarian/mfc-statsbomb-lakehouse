@@ -1,0 +1,6 @@
+# Local / CI environment: a folder that mirrors a Fabric lakehouse layout
+#   ./lakehouse/Files/...    raw landing (bronze)
+#   ./lakehouse/Tables/...   Delta tables (silver, gold, meta)
+platform:
+  kind: local
+  root: ./lakehouse
