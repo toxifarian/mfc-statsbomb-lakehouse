@@ -1,0 +1,88 @@
+{
+  "name": "pl_statsbomb_daily",
+  "properties": {
+    "description": "Daily StatsBomb ingestion: bronze -> silver (+ identity) -> DQ gate -> gold -> DQ -> refresh Direct Lake model. Each stage is a separate activity so a failure can be retried in isolation (every step is idempotent).",
+    "parameters": {
+      "scope": { "type": "string", "defaultValue": "55:282" },
+      "full_refresh": { "type": "bool", "defaultValue": false },
+      "dq_mode": { "type": "string", "defaultValue": "enforce" }
+    },
+    "activities": [
+      {
+        "name": "Bronze - land raw StatsBomb JSON",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": { "timeout": "0.02:00:00", "retry": 2, "retryIntervalInSeconds": 300 },
+        "typeProperties": {
+          "notebookId": "<NB_01_RUN_PIPELINE_ID>",
+          "workspaceId": "<WORKSPACE_ID>",
+          "parameters": {
+            "steps": { "value": "bronze", "type": "string" },
+            "scope": { "value": { "value": "@pipeline().parameters.scope", "type": "Expression" }, "type": "string" },
+            "full_refresh": { "value": { "value": "@pipeline().parameters.full_refresh", "type": "Expression" }, "type": "bool" }
+          }
+        }
+      },
+      {
+        "name": "Silver + identity + DQ gate",
+        "type": "TridentNotebook",
+        "dependsOn": [ { "activity": "Bronze - land raw StatsBomb JSON", "dependencyConditions": [ "Succeeded" ] } ],
+        "policy": { "timeout": "0.02:00:00", "retry": 1, "retryIntervalInSeconds": 120 },
+        "typeProperties": {
+          "notebookId": "<NB_01_RUN_PIPELINE_ID>",
+          "workspaceId": "<WORKSPACE_ID>",
+          "parameters": {
+            "steps": { "value": "silver,synthetic,integrate,dq_silver", "type": "string" },
+            "scope": { "value": { "value": "@pipeline().parameters.scope", "type": "Expression" }, "type": "string" },
+            "dq_mode": { "value": { "value": "@pipeline().parameters.dq_mode", "type": "Expression" }, "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "Gold star schema + DQ",
+        "type": "TridentNotebook",
+        "dependsOn": [ { "activity": "Silver + identity + DQ gate", "dependencyConditions": [ "Succeeded" ] } ],
+        "policy": { "timeout": "0.01:00:00", "retry": 1, "retryIntervalInSeconds": 120 },
+        "typeProperties": {
+          "notebookId": "<NB_01_RUN_PIPELINE_ID>",
+          "workspaceId": "<WORKSPACE_ID>",
+          "parameters": {
+            "steps": { "value": "gold,dq_gold", "type": "string" },
+            "dq_mode": { "value": { "value": "@pipeline().parameters.dq_mode", "type": "Expression" }, "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "Refresh Direct Lake model",
+        "type": "PBISemanticModelRefresh",
+        "dependsOn": [ { "activity": "Gold star schema + DQ", "dependencyConditions": [ "Succeeded" ] } ],
+        "policy": { "timeout": "0.00:30:00", "retry": 1 },
+        "typeProperties": {
+          "method": "post",
+          "groupId": "<WORKSPACE_ID>",
+          "datasetId": "<SEMANTIC_MODEL_ID>",
+          "commitMode": "Transactional",
+          "waitOnCompletion": true
+        }
+      },
+      {
+        "name": "Alert data team on failure",
+        "type": "Office365Outlook",
+        "dependsOn": [
+          { "activity": "Bronze - land raw StatsBomb JSON", "dependencyConditions": [ "Failed" ] },
+          { "activity": "Silver + identity + DQ gate", "dependencyConditions": [ "Failed" ] },
+          { "activity": "Gold star schema + DQ", "dependencyConditions": [ "Failed" ] }
+        ],
+        "typeProperties": {
+          "inputs": {
+            "body": {
+              "To": "data-engineering@example.com",
+              "Subject": "@concat('StatsBomb pipeline failed: ', pipeline().RunId)",
+              "Body": "<p>A stage failed. Check meta.pipeline_runs / meta.dq_results or the monitoring notebook.</p>"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
